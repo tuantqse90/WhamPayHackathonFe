@@ -39,15 +39,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="wallet"
         options={{
           title: 'Wallet',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
         }}
-      />
+      /> */}
       <Tabs.Screen
-        name="scanner"
+        name="recognizer"
         options={{
           title: 'Recognizer',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.2" color={color} />,

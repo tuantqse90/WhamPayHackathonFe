@@ -19,8 +19,10 @@ import TransferModal from '@/components/transfer-modal';
 import AddFundsModal from '@/components/add-funds-modal';
 import ProfileModal from '@/components/profile-modal';
 import QRScannerModal from '@/components/qr-scanner-modal';
+import InviteFriendsModal from '@/components/invite-friends-modal';
+import FriendsModal from '@/components/friends-modal';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiClient } from '@/utils/ApiClient';
+import { ApiClient, AuthenticationError } from '@/utils/ApiClient';
 import { fetchWalletBalance } from '@/utils/blockchainUtils';
 import { getMultipleTokenPrices, calculateUSDValue } from '@/utils/priceUtils';
 
@@ -72,7 +74,7 @@ interface TokenData {
 }
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<'assets' | 'contacts'>('assets');
   const [allTokens, setAllTokens] = useState<TokenData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,8 @@ export default function HomeScreen() {
   const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showInviteFriendsModal, setShowInviteFriendsModal] = useState(false);
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<FriendData | null>(null);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -110,8 +114,15 @@ export default function HomeScreen() {
         setLoading(true);
       }
 
+      // Check authentication before making API calls
+      if (!isAuthenticated) {
+        console.log('🔒 User not authenticated, skipping asset data load');
+        setTotalBalanceUSD('0');
+        return;
+      }
+
       // Load wallet data
-      const walletResponse = await ApiClient.exportMainWallet();
+      const walletResponse = await ApiClient.exportMainWallet({ silent: true });
       if (walletResponse.success && walletResponse.data) {
         try {
           // Get native ETH balance only
@@ -133,13 +144,18 @@ export default function HomeScreen() {
         }
       }
     } catch (error) {
-      console.error('Error loading asset data:', error);
-      Alert.alert('Error', 'Failed to load asset data');
+      if (error instanceof AuthenticationError) {
+        console.log('🔒 Authentication required for asset data - silently ignored');
+        setTotalBalanceUSD('0');
+      } else {
+        console.error('Error loading asset data:', error);
+        Alert.alert('Error', 'Failed to load asset data');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   // Load all available tokens from API with real balances
   const loadAllTokens = useCallback(async (isRefresh = false) => {
@@ -150,13 +166,20 @@ export default function HomeScreen() {
         setTokensLoading(true);
       }
 
+      // Check authentication before making API calls
+      if (!isAuthenticated) {
+        console.log('🔒 User not authenticated, skipping tokens load');
+        setAllTokens([]);
+        return;
+      }
+
       // Get wallet address first
-      const walletResponse = await ApiClient.exportMainWallet();
+      const walletResponse = await ApiClient.exportMainWallet({ silent: true });
       if (!walletResponse.success || !walletResponse.data) {
         return;
       }
 
-      const tokensResponse = await ApiClient.getTokens({ page: 1, size: 50 });
+      const tokensResponse = await ApiClient.getTokens({ page: 1, size: 50 }, { silent: true });
       if (tokensResponse && Array.isArray(tokensResponse)) {
         // Get all token symbols for price fetching
         const tokenSymbols = tokensResponse.map(token => token.symbol);
@@ -200,14 +223,19 @@ export default function HomeScreen() {
         setAllTokens(tokensWithBalance);
       }
     } catch (error) {
-      console.error('Error loading all tokens:', error);
+      if (error instanceof AuthenticationError) {
+        console.log('🔒 Authentication required for tokens - silently ignored');
+        setAllTokens([]);
+      } else {
+        console.error('Error loading all tokens:', error);
+      }
     } finally {
       setTokensLoading(false);
       if (isRefresh) {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     loadAssetData();
@@ -228,7 +256,7 @@ export default function HomeScreen() {
   };
 
   const handleInviteFriends = () => {
-    Alert.alert('Invite Friends', 'Invite friends functionality will be implemented');
+    setShowInviteFriendsModal(true);
   };
 
   const handleQRScan = () => {
@@ -416,37 +444,66 @@ export default function HomeScreen() {
               )}
             </>
           ) : (
-            // Contacts Tab Content
-            <>
-              {friendsData.map((friend, index) => (
-                <View key={friend.id}>
-                  <TouchableOpacity 
-                    style={styles.friendRow}
-                    onPress={() => setSelectedFriend(friend)}
-                  >
-                    <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
-                    
-                    <View style={styles.friendInfo}>
-                      <Text style={[styles.friendName, { color: isDark ? '#FFF' : '#333' }]}>
-                        {friend.name}
+            // Contacts Tab Content - Shows Friends Management
+            <View style={styles.contactsTabContent}>
+              <TouchableOpacity 
+                style={styles.manageFriendsButton}
+                onPress={() => setShowFriendsModal(true)}
+              >
+                <View style={styles.manageFriendsContent}>
+                  <View style={styles.manageFriendsLeft}>
+                    <View style={styles.manageFriendsIcon}>
+                      <IconSymbol name="person.2.fill" size={24} color="#007B50" />
+                    </View>
+                    <View style={styles.manageFriendsText}>
+                      <Text style={[styles.manageFriendsTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                        Manage Friends
                       </Text>
-                      <Text style={[styles.friendStatus, { 
-                        color: friend.status === 'Online' ? '#4CAF50' : (isDark ? '#AAA' : '#666') 
-                      }]}>
-                        {friend.status}
+                      <Text style={[styles.manageFriendsSubtitle, { color: isDark ? '#AAA' : '#666' }]}>
+                        View friends, send requests, and manage your network
                       </Text>
                     </View>
-
-                    {friend.status === 'Online' && (
-                      <View style={styles.onlineIndicator} />
-                    )}
-                  </TouchableOpacity>
-                  {index < friendsData.length - 1 && (
-                    <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
-                  )}
+                  </View>
+                  <IconSymbol name="chevron.right" size={16} color={isDark ? '#666' : '#999'} />
                 </View>
-              ))}
-            </>
+              </TouchableOpacity>
+
+              {friendsData.length > 0 && (
+                <>
+                  <Text style={[styles.recentFriendsTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                    Recent Friends
+                  </Text>
+                  {friendsData.slice(0, 3).map((friend, index) => (
+                    <View key={friend.id}>
+                      <TouchableOpacity 
+                        style={styles.friendRow}
+                        onPress={() => setSelectedFriend(friend)}
+                      >
+                        <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
+                        
+                        <View style={styles.friendInfo}>
+                          <Text style={[styles.friendName, { color: isDark ? '#FFF' : '#333' }]}>
+                            {friend.name}
+                          </Text>
+                          <Text style={[styles.friendStatus, { 
+                            color: friend.status === 'Online' ? '#4CAF50' : (isDark ? '#AAA' : '#666') 
+                          }]}>
+                            {friend.status}
+                          </Text>
+                        </View>
+
+                        {friend.status === 'Online' && (
+                          <View style={styles.onlineIndicator} />
+                        )}
+                      </TouchableOpacity>
+                      {index < Math.min(friendsData.length, 3) - 1 && (
+                        <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
+                      )}
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -467,6 +524,18 @@ export default function HomeScreen() {
       <QRScannerModal
         visible={showQRScanner}
         onClose={() => setShowQRScanner(false)}
+      />
+
+      {/* Invite Friends Modal */}
+      <InviteFriendsModal
+        visible={showInviteFriendsModal}
+        onClose={() => setShowInviteFriendsModal(false)}
+      />
+
+      {/* Friends Management Modal */}
+      <FriendsModal
+        visible={showFriendsModal}
+        onClose={() => setShowFriendsModal(false)}
       />
 
       {/* Profile Modal */}
@@ -742,5 +811,51 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
+  },
+  contactsTabContent: {
+    paddingHorizontal: 20,
+  },
+  manageFriendsButton: {
+    backgroundColor: 'rgba(0, 123, 80, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 123, 80, 0.2)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  manageFriendsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  manageFriendsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  manageFriendsIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 123, 80, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  manageFriendsText: {
+    flex: 1,
+  },
+  manageFriendsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  manageFriendsSubtitle: {
+    fontSize: 12,
+  },
+  recentFriendsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
   },
 });

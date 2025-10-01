@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,16 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '@/contexts/AuthContext';
+import { ApiClient, AuthenticationError } from '@/utils/ApiClient';
+import QRCode from 'react-native-qrcode-svg';
+import * as Clipboard from 'expo-clipboard';
 
 type PaymentMethod = 'applePay' | 'creditCard' | 'onChain';
 
@@ -113,10 +119,49 @@ const CalculatorButton: React.FC<CalculatorButtonProps> = ({ text, onPress, isSe
 export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isAuthenticated } = useAuth();
   
   const [showCalculator, setShowCalculator] = useState(false);
+  const [showOnChain, setShowOnChain] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
   const [amount, setAmount] = useState('0');
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+
+  const { width } = Dimensions.get('window');
+
+  // Load wallet address for onchain option
+  const loadWalletAddress = async () => {
+    try {
+      setLoadingWallet(true);
+      const response = await ApiClient.exportMainWallet({ silent: true });
+      if (response.success && response.data) {
+        setWalletAddress(response.data.address);
+      }
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        console.log('🔒 Authentication required for wallet address');
+      } else {
+        console.error('Error loading wallet address:', error);
+        Alert.alert('Error', 'Failed to load wallet address');
+      }
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = async (text: string, label: string) => {
+    await Clipboard.setStringAsync(text);
+    Alert.alert('Copied', `${label} copied to clipboard`);
+  };
+
+  // Load wallet address when modal opens
+  useEffect(() => {
+    if (visible && isAuthenticated) {
+      loadWalletAddress();
+    }
+  }, [visible, isAuthenticated]);
 
   const paymentMethods = [
     {
@@ -171,13 +216,22 @@ export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) 
 
   const handlePaymentMethodSelect = (method: PaymentMethod) => {
     setSelectedPaymentMethod(method);
-    setShowCalculator(true);
+    if (method === 'onChain') {
+      setShowOnChain(true);
+    } else {
+      setShowCalculator(true);
+    }
   };
 
   const handleBackFromCalculator = () => {
     setShowCalculator(false);
     setSelectedPaymentMethod(null);
     setAmount('0');
+  };
+
+  const handleBackFromOnChain = () => {
+    setShowOnChain(false);
+    setSelectedPaymentMethod(null);
   };
 
   const handlePayment = () => {
@@ -248,8 +302,11 @@ export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) 
 
         {/* Header */}
         <View style={styles.header}>
-          {showCalculator ? (
-            <TouchableOpacity onPress={handleBackFromCalculator} style={styles.backButton}>
+          {showCalculator || showOnChain ? (
+            <TouchableOpacity 
+              onPress={showCalculator ? handleBackFromCalculator : handleBackFromOnChain} 
+              style={styles.backButton}
+            >
               <View style={[styles.iconContainer, { backgroundColor: isDark ? '#333' : '#F0F0F0' }]}>
                 <IconSymbol name="chevron.left" size={16} color={isDark ? '#FFF' : '#333'} />
               </View>
@@ -259,7 +316,7 @@ export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) 
           )}
           
           <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#333' }]}>
-            {showCalculator ? 'Enter Amount' : 'Add Funds'}
+            {showCalculator ? 'Enter Amount' : showOnChain ? 'Add Funds - On Chain' : 'Add Funds'}
           </Text>
           
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -345,6 +402,88 @@ export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) 
               </LinearGradient>
             </TouchableOpacity>
           </View>
+        ) : showOnChain ? (
+          // OnChain View
+          <View style={styles.onChainContainer}>
+            <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#333' }]}>
+              Send crypto to this address
+            </Text>
+
+            {loadingWallet ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007B50" />
+                <Text style={[styles.loadingText, { color: isDark ? '#AAA' : '#666' }]}>
+                  Loading wallet address...
+                </Text>
+              </View>
+            ) : walletAddress ? (
+              <>
+                {/* Wallet Address Card */}
+                <View style={[styles.addressCard, { backgroundColor: isDark ? '#222' : '#FFF' }]}>
+                  <Text style={[styles.addressTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                    Wallet Address
+                  </Text>
+                  <Text style={[styles.addressText, { color: isDark ? '#AAA' : '#666' }]}>
+                    {walletAddress}
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => copyToClipboard(walletAddress, 'Wallet Address')} 
+                    style={styles.copyButton}
+                  >
+                    <IconSymbol name="doc.on.clipboard" size={16} color="#007B50" />
+                    <Text style={styles.copyButtonText}>Copy Address</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* QR Code Card */}
+                <View style={[styles.qrCard, { backgroundColor: isDark ? '#222' : '#FFF' }]}>
+                  <Text style={[styles.qrTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                    QR Code
+                  </Text>
+                  <View style={styles.qrContainer}>
+                    <QRCode
+                      value={walletAddress}
+                      size={width * 0.5}
+                      backgroundColor="white"
+                      color="black"
+                    />
+                  </View>
+                  <TouchableOpacity 
+                    onPress={() => copyToClipboard(walletAddress, 'Wallet Address')} 
+                    style={styles.qrCopyButton}
+                  >
+                    <IconSymbol name="doc.on.clipboard" size={14} color="#007B50" />
+                    <Text style={styles.qrCopyText}>Copy Address</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Instructions */}
+                <View style={[styles.instructionsCard, { backgroundColor: isDark ? '#1a1a1a' : '#F8F9FA' }]}>
+                  <IconSymbol name="info.circle" size={20} color="#007B50" />
+                  <View style={styles.instructionsContent}>
+                    <Text style={[styles.instructionsTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                      How to add funds
+                    </Text>
+                    <Text style={[styles.instructionsText, { color: isDark ? '#AAA' : '#666' }]}>
+                      1. Copy the wallet address above{'\n'}
+                      2. Send ETH or supported tokens to this address{'\n'}
+                      3. Your funds will appear in your balance shortly
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.errorContainer}>
+                <IconSymbol name="exclamationmark.triangle" size={48} color="#FF3B30" />
+                <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#333' }]}>
+                  Failed to load wallet address
+                </Text>
+                <TouchableOpacity onPress={loadWalletAddress} style={styles.retryButton}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         ) : (
           // Payment Methods View
           <View style={styles.paymentMethodsContainer}>
@@ -362,7 +501,7 @@ export default function AddFundsModal({ visible, onClose }: AddFundsModalProps) 
                   isRecommended={method.isRecommended}
                   onPress={() => {
                     if (method.id === 'onChain') {
-                      Alert.alert('On Chain', 'On-chain funding will be implemented in a future update.');
+                      handlePaymentMethodSelect(method.id);
                     } else {
                       handlePaymentMethodSelect(method.id);
                     }
@@ -563,6 +702,138 @@ const styles = StyleSheet.create({
   payButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // OnChain styles
+  onChainContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
+  addressCard: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  addressTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  addressText: {
+    fontSize: 14,
+    fontFamily: 'monospace',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 123, 80, 0.1)',
+    borderRadius: 8,
+    gap: 6,
+  },
+  copyButtonText: {
+    fontSize: 14,
+    color: '#007B50',
+    fontWeight: '500',
+  },
+  qrCard: {
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  qrTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  qrContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  qrCopyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 123, 80, 0.1)',
+    borderRadius: 8,
+    gap: 6,
+  },
+  qrCopyText: {
+    fontSize: 14,
+    color: '#007B50',
+    fontWeight: '500',
+  },
+  instructionsCard: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+    marginBottom: 20,
+  },
+  instructionsContent: {
+    flex: 1,
+  },
+  instructionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  instructionsText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#007B50',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

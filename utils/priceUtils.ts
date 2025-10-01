@@ -107,6 +107,8 @@ export async function getMultipleTokenPrices(symbols: string[]): Promise<{ [symb
       COINGECKO_IDS[symbol] || 'ethereum'
     ).join(',');
 
+    console.log('🚀 Calling CoinGecko API...', coinIds);
+
     const response = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd&include_24hr_change=true`,
       {

@@ -1,17 +1,18 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
   Alert,
   Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { LinearGradient } from 'expo-linear-gradient';
+import SelectTokenModal, { SelectableToken } from './select-token-modal';
 import TransferAmountView from './transfer-amount';
 
 type TransferMethod = 'social' | 'gift' | 'onchain';
@@ -30,6 +31,8 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
   const [giftUsername, setGiftUsername] = useState('');
   const [onChainAddress, setOnChainAddress] = useState('');
   const [showAmountView, setShowAmountView] = useState(false);
+  const [showSelectToken, setShowSelectToken] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<SelectableToken | null>(null);
   const [transferData, setTransferData] = useState<{
     method: TransferMethod;
     recipient: string;
@@ -104,35 +107,27 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
       return;
     }
 
-    // Set transfer data and show amount view
+    // Set transfer data and open token selection first
     setTransferData({
       method: selectedMethod,
       recipient: recipient.value,
     });
-    setShowAmountView(true);
+    setShowSelectToken(true);
   };
 
   const handleAmountViewClose = () => {
     setShowAmountView(false);
     setTransferData(null);
+    setSelectedToken(null);
+  };
+
+  const handleTokenSelected = (token: SelectableToken) => {
+    setSelectedToken(token);
+    setShowSelectToken(false);
+    setShowAmountView(true);
   };
 
   const recipientData = getRecipientData();
-
-  if (showAmountView && transferData) {
-    return (
-      <TransferAmountView
-        visible={showAmountView}
-        onClose={handleAmountViewClose}
-        transferMethod={transferData.method}
-        recipient={transferData.recipient}
-        onComplete={() => {
-          handleAmountViewClose();
-          onClose();
-        }}
-      />
-    );
-  }
 
   return (
     <Modal
@@ -141,7 +136,25 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
+      <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>        
+        <SelectTokenModal
+          visible={showSelectToken}
+          onClose={() => setShowSelectToken(false)}
+          onSelect={handleTokenSelected}
+        />
+        {showAmountView && transferData && (
+          <TransferAmountView
+            visible={showAmountView}
+            onClose={handleAmountViewClose}
+            transferMethod={transferData.method}
+            recipient={transferData.recipient}
+            selectedToken={selectedToken}
+            onComplete={() => {
+              handleAmountViewClose();
+              onClose();
+            }}
+          />
+        )}
         {/* Handle Bar */}
         <View style={styles.handleBar} />
 

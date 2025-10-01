@@ -1,16 +1,17 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
   Alert,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ApiClient } from '../utils/ApiClient';
+import { SelectableToken } from './select-token-modal';
 
 type TransferMethod = 'social' | 'onchain' | 'gift';
 
@@ -20,6 +21,7 @@ interface TransferAmountViewProps {
   transferMethod: TransferMethod;
   recipient: string;
   onComplete: () => void;
+  selectedToken?: SelectableToken | null;
 }
 
 interface CalculatorButtonProps {
@@ -68,6 +70,7 @@ export default function TransferAmountView({
   transferMethod,
   recipient,
   onComplete,
+  selectedToken,
 }: TransferAmountViewProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -108,13 +111,21 @@ export default function TransferAmountView({
 
   const executeTransfer = async () => {
     try {
+      const isNative = selectedToken?.isNative ?? true;
+      const tokenAddress = isNative ? '' : (selectedToken?.address || '');
       // For social transfer, use transferToUser API
       if (transferMethod === 'social') {
-        const result = await ApiClient.transferToUser({
-          recipient: recipient.replace('@', ''), // Remove @ symbol if present
-          amount: parseFloat(amount),
-          isNative: true, // Default to native token (ETH/PAS)
+        const result = await ApiClient.transfer({
+          // recipient: recipient.replace("@", ""), // Remove @ symbol if present
+          // amount: parseFloat(amount),
+          // isNative: true, // Default to native token (ETH/PAS)
+          // chainId: 8453,
+          recipient: recipient,
+          address: recipient,
           chainId: 8453,
+          isNative,
+          tokenAddress,
+          amount: parseFloat(amount),
         });
         
         if (result.success) {
@@ -131,7 +142,7 @@ export default function TransferAmountView({
         const result = await ApiClient.multiSendTokens({
           wallets: [recipient], // Single address for onchain
           amount: parseFloat(amount),
-          isNative: true,
+          isNative,
           chainId: 8453,
         });
         
@@ -197,9 +208,7 @@ export default function TransferAmountView({
             </View>
           </TouchableOpacity>
           
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#333' }]}>
-            Transfer Amount
-          </Text>
+          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#333' }]}>Transfer Amount</Text>
           
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <View style={[styles.iconContainer, { backgroundColor: isDark ? '#333' : '#F0F0F0' }]}>
@@ -405,7 +414,9 @@ const styles = StyleSheet.create({
   },
   calculatorButton: {
     flex: 1,
-    aspectRatio: 1,
+    // aspectRatio: 1,
+    height: 80,
+    width: 80,
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',

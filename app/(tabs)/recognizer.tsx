@@ -1,5 +1,5 @@
 import RecognizerView from '@/components/recognizer-view';
 
-export default function ScannerScreen() {
+export default function RecognizerScreen() {
   return <RecognizerView />;
 }

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { BACKEND_URL } from '../config/api';
 
 export interface AuthUser {
   id: string;
@@ -21,6 +22,7 @@ interface AuthContextType {
   login: (tokens: { accessToken: string; refreshToken: string; user: AuthUser }) => Promise<void>;
   logout: () => Promise<void>;
   checkAuthStatus: () => Promise<void>;
+  refreshToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,19 +63,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Parse user data
       const parsedUser: AuthUser = JSON.parse(userDataStr);
       
-      // Verify token is not expired
+      // Verify token is not expired (simplified - no auto-refresh to avoid circular dependency)
       try {
         const tokenPayload = JSON.parse(atob(token.split('.')[1]));
         const currentTime = Date.now() / 1000;
         
         if (tokenPayload.exp < currentTime) {
-          console.log('⏰ Token expired, attempting refresh...');
-          await refreshToken();
+          console.log('⏰ Token expired, please login again');
+          setIsAuthenticated(false);
+          setUser(null);
+          setIsLoading(false);
           return;
         }
       } catch (error) {
         console.error('Error parsing token:', error);
-        await logout();
+        setIsAuthenticated(false);
+        setUser(null);
+        setIsLoading(false);
         return;
       }
 
@@ -87,61 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
     } finally {
       setIsLoading(false);
-    }
-  }, []);
-
-  const refreshToken = useCallback(async () => {
-    try {
-      const refreshTokenValue = await AsyncStorage.getItem('whampay_refresh_token');
-      if (!refreshTokenValue) {
-        throw new Error('No refresh token');
-      }
-
-      const response = await fetch('http://172.16.184.16:3000/v1/auth/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: refreshTokenValue }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Refresh failed');
-      }
-
-      const data = await response.json();
-      
-      await AsyncStorage.multiSet([
-        ['whampay_access_token', data.data.accessToken],
-        ['whampay_refresh_token', data.data.refreshToken],
-      ]);
-
-      console.log('✅ Token refreshed successfully');
-      await checkAuthStatus();
-      
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      await logout();
-    }
-  }, [checkAuthStatus]);
-
-  const login = useCallback(async (tokens: { accessToken: string; refreshToken: string; user: AuthUser }) => {
-    try {
-      console.log('🔐 Logging in user:', tokens.user.name);
-      
-      // Store tokens and user data
-      await AsyncStorage.multiSet([
-        ['whampay_access_token', tokens.accessToken],
-        ['whampay_refresh_token', tokens.refreshToken],
-        ['whampay_user', JSON.stringify(tokens.user)],
-      ]);
-
-      setUser(tokens.user);
-      setIsAuthenticated(true);
-      
-      console.log('✅ Login successful, navigating to home');
-      
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
     }
   }, []);
 
@@ -170,6 +121,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [router]);
 
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    try {
+      console.log('🔄 Attempting token refresh...');
+      const refreshTokenValue = await AsyncStorage.getItem('whampay_refresh_token');
+      if (!refreshTokenValue) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refreshTokenValue }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Refresh failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.data?.accessToken || !data.data?.refreshToken) {
+        throw new Error('Invalid refresh response structure');
+      }
+      
+      await AsyncStorage.multiSet([
+        ['whampay_access_token', data.data.accessToken],
+        ['whampay_refresh_token', data.data.refreshToken],
+      ]);
+
+      console.log('✅ Token refreshed successfully');
+      
+      // Update auth state after successful refresh
+      const userData = await AsyncStorage.getItem('whampay_user');
+      if (userData) {
+        const parsedUser: AuthUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+      }
+      
+      return true;
+      
+    } catch (error) {
+      console.error('❌ Token refresh failed:', error);
+      await logout();
+      return false;
+    }
+  }, [logout]);
+
+  const login = useCallback(async (tokens: { accessToken: string; refreshToken: string; user: AuthUser }) => {
+    try {
+      console.log('🔐 Logging in user:', tokens.user.name);
+      
+      // Store tokens and user data
+      await AsyncStorage.multiSet([
+        ['whampay_access_token', tokens.accessToken],
+        ['whampay_refresh_token', tokens.refreshToken],
+        ['whampay_user', JSON.stringify(tokens.user)],
+      ]);
+
+      setUser(tokens.user);
+      setIsAuthenticated(true);
+      
+      console.log('✅ Login successful, navigating to home');
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  }, []);
+
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
@@ -181,6 +203,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     logout,
     checkAuthStatus,
+    refreshToken,
   };
 
   return (

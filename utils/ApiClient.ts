@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../config/api';
 
+// Error types for better handling
+export class AuthenticationError extends Error {
+  constructor(message = 'Authentication required') {
+    super(message);
+    this.name = 'AuthenticationError';
+  }
+}
+
 export class ApiClient {
   private static async getAuthHeaders() {
     const token = await AsyncStorage.getItem('whampay_access_token');
@@ -11,12 +19,25 @@ export class ApiClient {
     };
   }
 
-  private static async handleResponse(response: Response) {
+  private static async isAuthenticated(): Promise<boolean> {
+    try {
+      const token = await AsyncStorage.getItem('whampay_access_token');
+      return !!token;
+    } catch {
+      return false;
+    }
+  }
+
+  private static async handleResponse(response: Response, silent = false) {
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired, try to refresh
-        await this.refreshToken();
-        throw new Error('Token expired, please retry');
+        // Token expired or not authenticated
+        const errorData = await response.json().catch(() => ({}));
+        const error = new AuthenticationError(errorData.message || 'Authentication required');
+        
+        // Set a flag to indicate this is an auth error (for silent handling)
+        (error as any).silent = silent;
+        throw error;
       }
       
       const errorData = await response.json().catch(() => ({}));
@@ -26,40 +47,15 @@ export class ApiClient {
     return response.json();
   }
 
-  private static async refreshToken() {
-    try {
-      const refreshToken = await AsyncStorage.getItem('whampay_refresh_token');
-      if (!refreshToken) {
-        throw new Error('No refresh token');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Refresh failed');
-      }
-
-      const data = await response.json();
-      await AsyncStorage.multiSet([
-        ['whampay_access_token', data.data.accessToken],
-        ['whampay_refresh_token', data.data.refreshToken],
-      ]);
-    } catch (error) {
-      // Clear tokens and redirect to login
-      await AsyncStorage.multiRemove([
-        'whampay_access_token',
-        'whampay_refresh_token',
-        'whampay_user',
-      ]);
-      throw error;
+  static async get(endpoint: string, options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+    
+    // Check authentication first for protected endpoints
+    if (!await this.isAuthenticated() && silent) {
+      console.log('🔒 No authentication token, skipping API call silently');
+      throw new AuthenticationError('No authentication token');
     }
-  }
-
-  static async get(endpoint: string) {
+    
     const headers = await this.getAuthHeaders();
     console.log('📡 GET Request:', `${BACKEND_URL}${endpoint}`);
     console.log('📋 Headers:', headers);
@@ -68,49 +64,70 @@ export class ApiClient {
       headers,
     });
     console.log('📥 Response Status:', response.status);
-    return this.handleResponse(response);
+    return this.handleResponse(response, silent);
   }
 
-  static async post(endpoint: string, data: any) {
+  static async post(endpoint: string, data: any, options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+    
+    if (!await this.isAuthenticated() && silent) {
+      console.log('🔒 No authentication token, skipping API call silently');
+      throw new AuthenticationError('No authentication token');
+    }
+    
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${BACKEND_URL}${endpoint}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
     });
-    return this.handleResponse(response);
+    return this.handleResponse(response, silent);
   }
 
-  static async put(endpoint: string, data: any) {
+  static async put(endpoint: string, data: any, options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+    
+    if (!await this.isAuthenticated() && silent) {
+      console.log('🔒 No authentication token, skipping API call silently');
+      throw new AuthenticationError('No authentication token');
+    }
+    
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${BACKEND_URL}${endpoint}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(data),
     });
-    return this.handleResponse(response);
+    return this.handleResponse(response, silent);
   }
 
-  static async delete(endpoint: string) {
+  static async delete(endpoint: string, options: { silent?: boolean } = {}) {
+    const { silent = false } = options;
+    
+    if (!await this.isAuthenticated() && silent) {
+      console.log('🔒 No authentication token, skipping API call silently');
+      throw new AuthenticationError('No authentication token');
+    }
+    
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${BACKEND_URL}${endpoint}`, {
       method: 'DELETE',
       headers,
     });
-    return this.handleResponse(response);
+    return this.handleResponse(response, silent);
   }
 
   // Specific API methods
-  static async getUserInfo() {
-    return this.get('/auth/me');
+  static async getUserInfo(options: { silent?: boolean } = {}) {
+    return this.get('/auth/me', options);
   }
 
-  static async getWalletBalance() {
-    return this.get('/wallet/balance');
+  static async getWalletBalance(options: { silent?: boolean } = {}) {
+    return this.get('/wallet/balance', options);
   }
 
-  static async getTransactionHistory() {
-    return this.get('/transaction/history');
+  static async getTransactionHistory(options: { silent?: boolean } = {}) {
+    return this.get('/transaction/history', options);
   }
 
   static async sendPayment(data: {
@@ -118,17 +135,21 @@ export class ApiClient {
     amount: number;
     currency: string;
     memo?: string;
-  }) {
-    return this.post('/transaction/send', data);
+  }, options: { silent?: boolean } = {}) {
+    return this.post('/transaction/send', data, options);
   }
 
-  static async exportMainWallet() {
+  static async exportMainWallet(options: { silent?: boolean } = {}) {
     console.log('💰 Calling exportMainWallet API...');
     try {
-      const result = await this.get('/wallets/export-main');
+      const result = await this.get('/wallets/export-main', options);
       console.log('✅ Wallet export success:', result);
       return result;
     } catch (error) {
+      if (error instanceof AuthenticationError && options.silent) {
+        console.log('🔒 Wallet export skipped - not authenticated');
+        return { success: false, message: 'Authentication required', data: null };
+      }
       console.error('❌ Wallet export error:', error);
       throw error;
     }
@@ -177,14 +198,18 @@ export class ApiClient {
     page?: number;
     size?: number;
     desc?: boolean;
-  } = {}) {
+  } = {}, options: { silent?: boolean } = {}) {
     const { page = 1, size = 10, desc = false } = params;
     console.log('🪙 Calling getTokens API...', params);
     try {
-      const result = await this.get(`/tokens?page=${page}&size=${size}&desc=${desc}`);
+      const result = await this.get(`/tokens?page=${page}&size=${size}&desc=${desc}`, options);
       console.log('✅ Tokens list success:', result);
       return result;
     } catch (error) {
+      if (error instanceof AuthenticationError && options.silent) {
+        console.log('🔒 Tokens list skipped - not authenticated');
+        return [];
+      }
       console.error('❌ Tokens list error:', error);
       throw error;
     }
@@ -198,17 +223,24 @@ export class ApiClient {
     status?: string;
     fromUsername?: string;
     toUsername?: string;
-  } = {}) {
+  } = {
+    page: 1,
+    size: 10,
+    type: '',
+    status: '',
+    fromUsername: '',
+    toUsername: '',
+  }) {
     const queryParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
+      if (value !== undefined && value !== '') {
         queryParams.append(key, value.toString());
       }
     });
     
-    console.log('📜 Calling getTransactions API...', params);
+    console.log('📜 Calling getTransactions API...', queryParams.toString());
     try {
-      const result = await this.get(`/transactions?${queryParams.toString()}`);
+      const result = await this.get(`/transactions?${queryParams}`);
       console.log('✅ Transactions list success:', result);
       return result;
     } catch (error) {
@@ -226,6 +258,24 @@ export class ApiClient {
       return result;
     } catch (error) {
       console.error('❌ Transaction detail error:', error);
+      throw error;
+    }
+  }
+  static async transfer(data: {
+    recipient: string;
+    address: string;
+    chainId: number;
+    isNative: boolean;
+    tokenAddress: string;
+    amount: number;
+  }) {
+    console.log('🚀 Calling transfer API...', data);
+    try {
+      const result = await this.post('/wallets/transfer', data);
+      console.log('✅ Transfer success:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Transfer error:', error);
       throw error;
     }
   }
