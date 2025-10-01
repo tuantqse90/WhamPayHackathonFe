@@ -1,26 +1,26 @@
+import Avatar from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthenticationError } from '@/utils/ApiClient';
 import {
-  FriendshipApiClient,
-  FriendshipDto,
-  UserSummaryDto
+    FriendshipApiClient,
+    FriendshipDto,
+    UserSummaryDto
 } from '@/utils/FriendshipApiClient';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface FriendsModalProps {
@@ -377,9 +377,9 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
 
     return (
       <View style={[styles.listItem, { backgroundColor: isDark ? '#222' : '#FFF' }]}>
-        <Image 
-          source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=${friend.name}` }}
-          style={styles.avatar}
+        <Avatar 
+          name={friend.name}
+          size={50}
         />
         <View style={styles.userInfo}>
           <Text style={[styles.userName, { color: isDark ? '#FFF' : '#333' }]}>
@@ -411,9 +411,9 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
 
     return (
       <View style={[styles.listItem, { backgroundColor: isDark ? '#222' : '#FFF' }]}>
-        <Image 
-          source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=${requester.name}` }}
-          style={styles.avatar}
+        <Avatar 
+          name={requester.name}
+          size={50}
         />
         <View style={styles.userInfo}>
           <Text style={[styles.userName, { color: isDark ? '#FFF' : '#333' }]}>
@@ -449,9 +449,9 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
   // Search User Item Component
   const SearchUserItem = ({ item }: { item: UserSummaryDto }) => (
     <View style={[styles.listItem, { backgroundColor: isDark ? '#222' : '#FFF' }]}>
-      <Image 
-        source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=${item.name}` }}
-        style={styles.avatar}
+      <Avatar 
+        name={item.name}
+        size={50}
       />
       <View style={styles.userInfo}>
         <Text style={[styles.userName, { color: isDark ? '#FFF' : '#333' }]}>
@@ -731,14 +731,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
   userInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   userName: {
     fontSize: 16,

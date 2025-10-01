@@ -3,6 +3,7 @@ import FriendsModal from '@/components/friends-modal';
 import ProfileModal from '@/components/profile-modal';
 import SwipeNavigation from '@/components/swipe-navigation';
 import TransferModal from '@/components/transfer-modal';
+import Avatar from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -462,7 +463,7 @@ export default function HomeScreen() {
                         style={styles.friendRow}
                         onPress={() => setSelectedFriend(friend)}
                       >
-                        <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
+                        <Avatar name={friend.name} size={50} />
                         
                         <View style={styles.friendInfo}>
                           <Text style={[styles.friendName, { color: isDark ? '#FFF' : '#333' }]}>
@@ -673,14 +674,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-  friendAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 16,
-  },
   friendInfo: {
     flex: 1,
+    marginLeft: 16,
   },
   friendName: {
     fontSize: 16,

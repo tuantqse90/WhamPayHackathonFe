@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  Dimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import Avatar from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import React, { useState } from 'react';
+import {
+    Alert,
+    Dimensions,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -354,7 +355,7 @@ export default function SelfProfileView() {
 
       {/* Profile Header */}
       <View style={styles.profileHeader}>
-        <Image source={{ uri: userProfile.avatar }} style={styles.avatar} />
+        <Avatar name={userProfile.name} size={100} />
         
         <View style={styles.profileInfo}>
           <Text style={[styles.name, { color: isDark ? '#FFF' : '#333' }]}>

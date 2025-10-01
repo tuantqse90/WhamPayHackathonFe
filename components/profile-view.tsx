@@ -1,18 +1,18 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import Avatar from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import React from 'react';
+import {
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Friend {
   id: string;
@@ -168,7 +168,10 @@ export default function ProfileView({ friend, onBack }: ProfileViewProps) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+          <Avatar 
+            name={friend.name}
+            size={120}
+          />
           
           <View style={styles.profileInfo}>
             <Text style={[styles.name, { color: isDark ? '#FFF' : '#333' }]}>
@@ -288,25 +291,10 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
     paddingHorizontal: 20,
   },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
-    marginBottom: 16,
-  },
   profileInfo: {
     alignItems: 'center',
     marginBottom: 16,
+    marginTop: 16,
   },
   name: {
     fontSize: 20,

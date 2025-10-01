@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import Avatar from '@/components/ui/avatar';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  Animated,
+    Animated,
+    Dimensions,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -338,7 +338,7 @@ export default function RecognizerView() {
                     },
                   ]}
                 >
-                  <Image source={{ uri: currentMember.avatar }} style={styles.avatar} />
+                  <Avatar name={currentMember.name} size={screenWidth - 40} />
                   
                   {/* Gradient Overlay */}
                   <LinearGradient
