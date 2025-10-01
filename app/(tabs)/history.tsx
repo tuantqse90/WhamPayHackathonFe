@@ -1,17 +1,20 @@
+import SwipeNavigation from '@/components/swipe-navigation';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ApiClient } from '@/utils/ApiClient';
+import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  ActivityIndicator,
+    ActivityIndicator,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface Transaction {
@@ -33,6 +36,14 @@ export default function HistoryScreen() {
   const [showingFilters, setShowingFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const isDark = colorScheme === 'dark';
+
+  const handleSwipeLeft = () => {
+    router.push('/(tabs)/menu');
+  };
+
+  const handleSwipeRight = () => {
+    router.push('/(tabs)/wallet');
+  };
 
   const filterOptions = ['All', 'Add Fund', 'Transfer', 'Donate', 'Send Gift'];
 
@@ -171,7 +182,12 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <SwipeNavigation 
+        onSwipeLeft={handleSwipeLeft}
+        onSwipeRight={handleSwipeRight}
+        threshold={100}
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
         {/* Enhanced Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerRow}>
@@ -192,9 +208,9 @@ export default function HistoryScreen() {
               <IconSymbol 
                 name="line.3.horizontal.decrease.circle" 
                 size={12} 
-                color="#007B50" 
+                color={Colors[colorScheme ?? 'light'].primary} 
               />
-              <Text style={styles.filterButtonText}>Filter</Text>
+              <Text style={[styles.filterButtonText, { color: Colors[colorScheme ?? 'light'].primary }]}>Filter</Text>
             </TouchableOpacity>
           </View>
 
@@ -224,7 +240,7 @@ export default function HistoryScreen() {
                     style={[
                       styles.filterChip,
                       selectedFilter === filter && styles.filterChipSelected,
-                      { backgroundColor: selectedFilter === filter ? '#007B50' : (isDark ? '#2A2A2A' : '#F0F0F0') }
+                      { backgroundColor: selectedFilter === filter ? Colors[colorScheme ?? 'light'].primary : (isDark ? Colors[colorScheme ?? 'light'].surfaceVariant : Colors[colorScheme ?? 'light'].surfaceVariant) }
                     ]}
                     onPress={() => setSelectedFilter(filter)}
                   >
@@ -305,7 +321,8 @@ export default function HistoryScreen() {
         </View>
 
         <View style={{ height: 100 }} />
-      </ScrollView>
+        </ScrollView>
+      </SwipeNavigation>
     </SafeAreaView>
   );
 }

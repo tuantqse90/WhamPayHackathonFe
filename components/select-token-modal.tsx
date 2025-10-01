@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ApiClient } from '@/utils/ApiClient';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export type SelectableToken = {
   symbol: string;
@@ -23,8 +23,21 @@ const DEFAULT_TOKENS: SelectableToken[] = [
   { symbol: 'USDC', name: 'USD Coin' },
   { symbol: 'USDT', name: 'Tether USD' },
   { symbol: 'BTC', name: 'Bitcoin' },
-  { symbol: 'PAS', name: 'Passet', isNative: false },
+  { symbol: 'PAS', name: 'Paseo', isNative: false },
 ];
+
+
+// Local token logos
+const getTokenLogoSource = (symbol: string) => {
+  switch (symbol.toUpperCase()) {
+    case 'ETH':
+      return require('../assets/images/token-nft/eth.png');
+    case 'USDT':
+      return require('../assets/images/token-nft/usdt.png');
+    default:
+      return require('../assets/images/token-nft/eth.png');
+  }
+};
 
 export default function SelectTokenModal({ visible, onClose, onSelect, tokens = DEFAULT_TOKENS }: SelectTokenModalProps) {
   const colorScheme = useColorScheme();
@@ -111,8 +124,11 @@ export default function SelectTokenModal({ visible, onClose, onSelect, tokens = 
                   activeOpacity={0.7}
                   onPress={() => onSelect(token)}
                 >
-                  <View style={[styles.tokenIcon, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,123,80,0.08)' }]}>
-                    <IconSymbol name="creditcard" size={18} color="#007B50" />
+                  <View style={styles.tokenIcon}>
+                    <Image 
+                      source={getTokenLogoSource(token.symbol)}
+                      style={styles.tokenLogo}
+                    />
                   </View>
                   <View style={styles.tokenInfo}>
                     <Text style={[styles.tokenSymbol, { color: isDark ? '#FFF' : '#333' }]}>{token.symbol}</Text>
@@ -200,6 +216,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    backgroundColor: 'transparent',
+  },
+  tokenLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   tokenInfo: {
     flex: 1,

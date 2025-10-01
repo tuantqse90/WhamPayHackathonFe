@@ -1,37 +1,82 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+    Alert,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
 interface QRScannerModalProps {
   visible: boolean;
   onClose: () => void;
+  autoOpenCamera?: boolean;
 }
 
-export default function QRScannerModal({ visible, onClose }: QRScannerModalProps) {
+export default function QRScannerModal({ visible, onClose, autoOpenCamera = false }: QRScannerModalProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [showCamera, setShowCamera] = useState(autoOpenCamera);
 
-  const handleScanQR = () => {
+  const handleBarCodeScanned = ({ type, data }: any) => {
+    setScanned(true);
     Alert.alert(
-      'QR Scanner',
-      'QR code scanning functionality will be implemented using expo-camera in a future update.',
+      'QR Code Scanned!',
+      `Type: ${type}\nData: ${data}`,
       [
         {
-          text: 'OK',
-          style: 'default',
+          text: 'Scan Again',
+          onPress: () => setScanned(false),
+        },
+        {
+          text: 'Close',
+          onPress: () => {
+            setShowCamera(false);
+            onClose();
+          },
         },
       ]
     );
+  };
+
+  useEffect(() => {
+    if (visible && !permission?.granted) {
+      requestPermission();
+    }
+  }, [visible, permission]);
+
+  useEffect(() => {
+    if (visible && autoOpenCamera && permission?.granted) {
+      setShowCamera(true);
+    }
+  }, [visible, autoOpenCamera, permission]);
+
+  const handleScanQR = () => {
+    if (!permission?.granted) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please grant camera permission to scan QR codes.',
+        [
+          {
+            text: 'Grant Permission',
+            onPress: requestPermission,
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+      return;
+    }
+    setShowCamera(true);
   };
 
   const handleGenerateQR = () => {
@@ -60,6 +105,59 @@ export default function QRScannerModal({ visible, onClose }: QRScannerModalProps
     );
   };
 
+  // Camera View
+  if (showCamera && permission?.granted) {
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowCamera(false)}
+      >
+        <View style={styles.cameraContainer}>
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr", "pdf417"],
+            }}
+          >
+            {/* Overlay */}
+            <View style={styles.overlay}>
+              {/* Header */}
+              <View style={styles.cameraHeader}>
+                <TouchableOpacity onPress={() => setShowCamera(false)} style={styles.cameraCloseButton}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <IconSymbol name="xmark" size={16} color="white" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Scanner Frame */}
+              <View style={styles.scannerFrame}>
+                <View style={styles.scannerOverlay}>
+                  <View style={styles.scannerTopLeft} />
+                  <View style={styles.scannerTopRight} />
+                  <View style={styles.scannerBottomLeft} />
+                  <View style={styles.scannerBottomRight} />
+                </View>
+              </View>
+
+              {/* Instructions */}
+              <View style={styles.cameraInstructionsContainer}>
+                <Text style={styles.cameraInstructionsText}>
+                  Position QR code within the frame to scan
+                </Text>
+              </View>
+            </View>
+          </CameraView>
+        </View>
+      </Modal>
+    );
+  }
+
+  // Main Modal View
   return (
     <Modal
       visible={visible}
@@ -67,7 +165,7 @@ export default function QRScannerModal({ visible, onClose }: QRScannerModalProps
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
+      <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -133,7 +231,7 @@ export default function QRScannerModal({ visible, onClose }: QRScannerModalProps
             </Text>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -248,5 +346,98 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 8,
+  },
+  // Camera styles
+  cameraContainer: {
+    flex: 1,
+  },
+  camera: {
+    flex: 1,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+  },
+  cameraCloseButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerOverlay: {
+    width: 250,
+    height: 250,
+    position: 'relative',
+  },
+  scannerTopLeft: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 50,
+    height: 50,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#007B50',
+  },
+  scannerTopRight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 50,
+    height: 50,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#007B50',
+  },
+  scannerBottomLeft: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 50,
+    height: 50,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#007B50',
+  },
+  scannerBottomRight: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 50,
+    height: 50,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#007B50',
+  },
+  cameraInstructionsContainer: {
+    paddingBottom: 50,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  cameraInstructionsText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
 });

@@ -1,21 +1,22 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  TouchableOpacity,
-  Alert,
-  Switch,
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { logout } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
   const [biometricEnabled, setBiometricEnabled] = React.useState(false);
 
@@ -31,10 +32,7 @@ export default function SettingsScreen() {
         {
           text: 'Logout',
           style: 'destructive',
-          onPress: () => {
-            // Navigate back to login
-            router.replace('/auth/login');
-          },
+          onPress: logout,
         },
       ]
     );

@@ -1,8 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   ScrollView,
@@ -33,6 +35,7 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
   const [showAmountView, setShowAmountView] = useState(false);
   const [showSelectToken, setShowSelectToken] = useState(false);
   const [selectedToken, setSelectedToken] = useState<SelectableToken | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [transferData, setTransferData] = useState<{
     method: TransferMethod;
     recipient: string;
@@ -94,25 +97,39 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const recipient = getRecipientData();
-    
     if (!recipient.value.trim()) {
       Alert.alert('Error', `Please enter ${recipient.title.toLowerCase()}`);
       return;
     }
 
     if (selectedMethod === 'gift') {
-      Alert.alert('Gift Feature', 'Gift sending feature will be implemented in a future update.');
+      // Navigate to Send Gift screen instead of showing alert
+      onClose(); // Close the modal first
+      router.push(`/(tabs)/send-gift/${recipient.value}`);
+     
       return;
     }
 
-    // Set transfer data and open token selection first
-    setTransferData({
-      method: selectedMethod,
-      recipient: recipient.value,
-    });
-    setShowSelectToken(true);
+    setIsLoading(true);
+    
+    try {
+      // Simulate a brief loading for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Set transfer data and open token selection first
+      setTransferData({
+        method: selectedMethod,
+        recipient: recipient.value,
+      });
+      setShowSelectToken(true);
+    } catch (error) {
+      console.error('Error processing transfer:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAmountViewClose = () => {
@@ -245,10 +262,10 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
           <TouchableOpacity
             style={[
               styles.transferButton,
-              (!recipientData.value.trim()) && styles.transferButtonDisabled,
+              (!recipientData.value.trim() || isLoading) && styles.transferButtonDisabled,
             ]}
             onPress={handleNext}
-            disabled={!recipientData.value.trim()}
+            disabled={!recipientData.value.trim() || isLoading}
           >
             <LinearGradient
               colors={['#007B50', 'rgba(0, 123, 80, 0.8)']}
@@ -256,8 +273,14 @@ export default function TransferModal({ visible, onClose }: TransferModalProps) 
               end={{ x: 1, y: 0 }}
               style={styles.transferGradient}
             >
-              <IconSymbol name="arrow.right" size={16} color="white" />
-              <Text style={styles.transferButtonText}>Next</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <IconSymbol name="arrow.right" size={16} color="white" />
+              )}
+              <Text style={styles.transferButtonText}>
+                {isLoading ? 'Processing...' : 'Next'}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>

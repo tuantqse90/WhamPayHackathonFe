@@ -1,30 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { router } from 'expo-router';
-import TransferModal from '@/components/transfer-modal';
 import AddFundsModal from '@/components/add-funds-modal';
-import ProfileModal from '@/components/profile-modal';
-import QRScannerModal from '@/components/qr-scanner-modal';
-import InviteFriendsModal from '@/components/invite-friends-modal';
 import FriendsModal from '@/components/friends-modal';
+import ProfileModal from '@/components/profile-modal';
+import SwipeNavigation from '@/components/swipe-navigation';
+import TransferModal from '@/components/transfer-modal';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ApiClient, AuthenticationError } from '@/utils/ApiClient';
 import { fetchWalletBalance } from '@/utils/blockchainUtils';
-import { getMultipleTokenPrices, calculateUSDValue } from '@/utils/priceUtils';
+import { calculateUSDValue, getMultipleTokenPrices } from '@/utils/priceUtils';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface FriendData {
   id: string;
@@ -84,25 +84,36 @@ export default function HomeScreen() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showQRScanner, setShowQRScanner] = useState(false);
-  const [showInviteFriendsModal, setShowInviteFriendsModal] = useState(false);
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<FriendData | null>(null);
+  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  // Color mapping for tokens
+  // Color mapping for tokens - using actual brand colors
   const getTokenColor = (symbol: string): string => {
     const colorMap: { [key: string]: string } = {
-      'PAS': '#E91E63',
-      'USDT': '#26A17B',
-      'USDC': '#2196F3',
-      'ETH': '#627EEA',
-      'BTC': '#F7931A',
-      'DOT': '#E6007A',
-      'BNB': '#F3BA2F',
+      'PAS': '#627EEA', // Ethereum blue for Paseo
+      'USDT': '#26A17B', // Tether green
+      'USDC': '#2775CA', // USD Coin blue
+      'ETH': '#627EEA', // Ethereum blue
+      'BTC': '#F7931A', // Bitcoin orange
+      'DOT': '#E6007A', // Polkadot pink
+      'BNB': '#F3BA2F', // Binance yellow
     };
-    return colorMap[symbol.toUpperCase()] || '#9C27B0';
+    return colorMap[symbol.toUpperCase()] || '#627EEA';
+  };
+
+  // Local token logos for key tokens
+  const getTokenLogoSource = (symbol: string) => {
+    switch (symbol.toUpperCase()) {
+      case 'ETH':
+        return require('../../assets/images/token-nft/eth.png');
+      case 'USDT':
+        return require('../../assets/images/token-nft/usdt.png');
+      default:
+        return require('../../assets/images/token-nft/eth.png');
+    }
   };
 
   // Load native balance only for Balance Display
@@ -255,21 +266,29 @@ export default function HomeScreen() {
     setShowAddFundsModal(true);
   };
 
-  const handleInviteFriends = () => {
-    setShowInviteFriendsModal(true);
+  const handleSwipeLeft = () => {
+    console.log('🔄 Swipe Left detected - navigating to Scanner');
+    router.push('/(tabs)/scanner');
   };
 
-  const handleQRScan = () => {
-    setShowQRScanner(true);
+  const handleSwipeRight = () => {
+    console.log('🔄 Swipe Right detected - navigating to History');
+    router.push('/(tabs)/history');
   };
 
-  const handleProfile = () => {
-    router.push('/profile');
+  const toggleBalanceVisibility = () => {
+    setIsBalanceHidden(!isBalanceHidden);
   };
+
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
-      <ScrollView 
+      <SwipeNavigation 
+        onSwipeLeft={handleSwipeLeft}
+        onSwipeRight={handleSwipeRight}
+        threshold={100}
+      >
+        <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -280,79 +299,42 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleProfile} style={styles.profileButton}>
-            <Image
-              source={{ 
-                uri: user?.twitterId 
-                  ? `https://api.twitter.com/1.1/users/profile_image?user_id=${user.twitterId}&size=bigger`
-                  : 'https://pbs.twimg.com/profile_images/1892414539762978816/GL7lmx5e_400x400.jpg'
-              }}
-              style={styles.profileImage}
-            />
-          </TouchableOpacity>
-          
-          <View style={styles.greetingContainer}>
-            <Text style={[styles.greeting, { color: isDark ? '#FFF' : '#333' }]}>
-              gm {user?.name || 'User'}
-            </Text>
-            <Text style={[styles.subGreeting, { color: isDark ? '#AAA' : '#666' }]}>
-              @{user?.username || 'username'}
-            </Text>
-          </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={handleInviteFriends} style={styles.inviteButton}>
-              <Text style={styles.inviteButtonText}>Invite friends</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity onPress={handleQRScan} style={styles.qrButton}>
-              <IconSymbol name="qrcode.viewfinder" size={16} color="#007B50" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity onPress={logout} style={styles.logoutButton}>
-              <IconSymbol name="rectangle.portrait.and.arrow.right" size={16} color="#FF3B30" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Balance Display */}
-        <View style={styles.balanceContainer}>
+        <TouchableOpacity style={styles.balanceContainer} onPress={toggleBalanceVisibility}>
           <View style={styles.balanceRow}>
             {loading ? (
               <ActivityIndicator size="large" color="#007B50" />
             ) : (
               <>
                 <Text style={[styles.balanceAmount, { color: isDark ? '#FFF' : '#333' }]}>
-                  ${totalBalanceUSD || '0.00'}
+                  {isBalanceHidden ? '****' : `$${totalBalanceUSD || '0.00'}`}
                 </Text>
                 <Text style={[styles.balanceCurrency, { color: isDark ? '#AAA' : '#666' }]}>
-                  USD
+                  {isBalanceHidden ? '' : 'USD'}
                 </Text>
               </>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity onPress={handleTransfer} style={styles.transferButton}>
             <View style={styles.transferButtonContent}>
-              <Text style={styles.transferButtonText}>Transfer</Text>
-              <IconSymbol name="arrow.up.right" size={20} color="#007B50" />
+              <Text style={[styles.transferButtonText, { color: Colors[colorScheme ?? 'light'].primary }]}>Transfer</Text>
+              <IconSymbol name="arrow.up.right" size={24} color={Colors[colorScheme ?? 'light'].primary} />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleAddFunds} style={styles.addFundsButton}>
             <LinearGradient
-              colors={['#007B50', '#005A3C']}
+              colors={[Colors[colorScheme ?? 'light'].primary, Colors[colorScheme ?? 'light'].secondary]}
               style={styles.addFundsGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
               <Text style={styles.addFundsButtonText}>Add Funds</Text>
-              <IconSymbol name="arrow.down.left" size={20} color="white" />
+              <IconSymbol name="arrow.down.left" size={24} color="white" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -412,10 +394,11 @@ export default function HomeScreen() {
                 allTokens.map((token, index) => (
                   <View key={token.id}>
                     <TouchableOpacity style={styles.assetRow}>
-                      <View style={[styles.assetIcon, { backgroundColor: token.color }]}>
-                        <Text style={styles.assetIconText}>
-                          {token.symbol.charAt(0)}
-                        </Text>
+                      <View style={styles.assetIcon}>
+                        <Image 
+                          source={getTokenLogoSource(token.symbol)}
+                          style={styles.assetLogo}
+                        />
                       </View>
                       
                       <View style={styles.assetInfo}>
@@ -429,10 +412,10 @@ export default function HomeScreen() {
 
                       <View style={styles.assetValues}>
                         <Text style={[styles.assetQuantity, { color: isDark ? '#FFF' : '#333' }]}>
-                          {parseFloat(token.balance || '0').toFixed(4)}
+                          {isBalanceHidden ? '****' : parseFloat(token.balance || '0').toFixed(4)}
                         </Text>
                         <Text style={[styles.assetTotal, { color: isDark ? '#AAA' : '#666' }]}>
-                          ${token.usdValue || '0.00'}
+                          {isBalanceHidden ? '****' : `$${token.usdValue || '0.00'}`}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -506,48 +489,41 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+
+        </ScrollView>
+      </SwipeNavigation>
 
       {/* Transfer Modal */}
-      <TransferModal
-        visible={showTransferModal}
-        onClose={() => setShowTransferModal(false)}
-      />
+        <TransferModal
+          visible={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+        />
 
-      {/* Add Funds Modal */}
-      <AddFundsModal
-        visible={showAddFundsModal}
-        onClose={() => setShowAddFundsModal(false)}
-      />
+        {/* Add Funds Modal */}
+        <AddFundsModal
+          visible={showAddFundsModal}
+          onClose={() => setShowAddFundsModal(false)}
+        />
 
-      {/* QR Scanner Modal */}
-      <QRScannerModal
-        visible={showQRScanner}
-        onClose={() => setShowQRScanner(false)}
-      />
 
-      {/* Invite Friends Modal */}
-      <InviteFriendsModal
-        visible={showInviteFriendsModal}
-        onClose={() => setShowInviteFriendsModal(false)}
-      />
 
-      {/* Friends Management Modal */}
-      <FriendsModal
-        visible={showFriendsModal}
-        onClose={() => setShowFriendsModal(false)}
-      />
+        {/* Friends Management Modal */}
+        <FriendsModal
+          visible={showFriendsModal}
+          onClose={() => setShowFriendsModal(false)}
+        />
 
-      {/* Profile Modal */}
-      <ProfileModal
-        visible={showProfileModal}
-        friend={selectedFriend}
-        onClose={() => {
-          setShowProfileModal(false);
-          setSelectedFriend(null);
-        }}
-      />
-    </SafeAreaView>
+        {/* Profile Modal */}
+        <ProfileModal
+          visible={showProfileModal}
+          friend={selectedFriend}
+          onClose={() => {
+            setShowProfileModal(false);
+            setSelectedFriend(null);
+          }}
+        />
+
+      </SafeAreaView>
   );
 }
 
@@ -557,61 +533,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
-  profileButton: {
-    marginRight: 12,
-  },
-  profileImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  greetingContainer: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  subGreeting: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  inviteButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#007B50',
-    borderRadius: 16,
-  },
-  inviteButtonText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#007B50',
-  },
-  qrButton: {
-    padding: 6,
-    borderWidth: 1,
-    borderColor: '#007B50',
-    borderRadius: 16,
-  },
-  logoutButton: {
-    padding: 6,
-    borderWidth: 1,
-    borderColor: '#FF3B30',
-    borderRadius: 16,
   },
   balanceContainer: {
     alignItems: 'center',
@@ -642,28 +563,27 @@ const styles = StyleSheet.create({
   },
   transferButton: {
     flex: 1,
-    height: 60,
+    height: 80,
     backgroundColor: 'rgba(0, 123, 80, 0.1)',
     borderWidth: 1,
     borderColor: '#007B50',
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
   },
   transferButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   transferButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#007B50',
   },
   addFundsButton: {
     flex: 1,
-    height: 60,
-    borderRadius: 12,
+    height: 80,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   addFundsGradient: {
@@ -671,17 +591,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   addFundsButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: 'white',
   },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 0,
     gap: 24,
   },
   tabButton: {
@@ -718,33 +638,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    backgroundColor: 'transparent',
   },
-  assetIconText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  assetLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   assetInfo: {
     flex: 1,
   },
   assetName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   assetPrice: {
-    fontSize: 12,
+    fontSize: 14,
   },
   assetValues: {
     alignItems: 'flex-end',
   },
   assetQuantity: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   assetTotal: {
-    fontSize: 12,
+    fontSize: 14,
   },
   friendRow: {
     flexDirection: 'row',
@@ -857,5 +778,190 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  // Payy Card Banner
+  payyCardBanner: {
+    marginHorizontal: 20,
+    marginBottom: 0,
+    borderRadius: 20,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    height: 140,
+    shadowColor: '#007B50',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  payyCardLeft: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    position: 'relative',
+  },
+  payyCardPreview: {
+    width: 90,
+    height: 56,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  payyCardPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  payyCardPreviewLogo: {
+    backgroundColor: '#000',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  payyCardPreviewText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  payyCardPreviewChip: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  payyCardChipDot1: {
+    width: 4,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 2,
+  },
+  payyCardChipDot2: {
+    width: 4,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 2,
+  },
+  payyCardChipDot3: {
+    width: 4,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 2,
+  },
+  payyCardChipDot4: {
+    width: 4,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 2,
+  },
+  payyCardPreviewBody: {
+    flex: 1,
+    justifyContent: 'space-between',
+    position: 'relative',
+  },
+  payyCardPreviewShapes: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  payyCardPreviewShape1: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 12,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 6,
+    transform: [{ rotate: '45deg' }],
+  },
+  payyCardPreviewShape2: {
+    position: 'absolute',
+    top: 8,
+    right: 6,
+    width: 8,
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 4,
+    transform: [{ rotate: '-30deg' }],
+  },
+  payyCardPreviewShape3: {
+    position: 'absolute',
+    bottom: 4,
+    left: 8,
+    width: 6,
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    transform: [{ rotate: '60deg' }],
+  },
+  payyCardPreviewNumber: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  payyCardPreviewNumberText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 8,
+    fontWeight: '500',
+    letterSpacing: 1,
+  },
+  payyCardRight: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    justifyContent: 'space-between',
+  },
+  payyCardHeader: {
+    marginBottom: 8,
+  },
+  payyCardLogoContainer: {
+    alignItems: 'flex-start',
+  },
+  payyCardMainText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  payyCardSubText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  payyCardCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  payyCardCTAText: {
+    color: '#007B50',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  payyCardArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#007B50',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });

@@ -3,12 +3,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
-  Alert,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { ApiClient } from '../utils/ApiClient';
 import { SelectableToken } from './select-token-modal';
@@ -75,6 +76,7 @@ export default function TransferAmountView({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const [amount, setAmount] = useState('0');
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const getRecipientIcon = () => {
     return transferMethod === 'social' ? 'at' : 'link';
@@ -110,6 +112,8 @@ export default function TransferAmountView({
   };
 
   const executeTransfer = async () => {
+    setIsTransferring(true);
+    
     try {
       const isNative = selectedToken?.isNative ?? true;
       const tokenAddress = isNative ? '' : (selectedToken?.address || '');
@@ -159,6 +163,8 @@ export default function TransferAmountView({
     } catch (error) {
       console.error('Transfer error:', error);
       Alert.alert('Transfer Failed', 'An error occurred during transfer');
+    } finally {
+      setIsTransferring(false);
     }
   };
 
@@ -187,7 +193,7 @@ export default function TransferAmountView({
     );
   };
 
-  const isAmountValid = amount !== '0' && amount.length > 0;
+  const isAmountValid = amount !== '0' && amount.length > 0 && !isTransferring;
 
   return (
     <Modal
@@ -297,13 +303,17 @@ export default function TransferAmountView({
             end={{ x: 1, y: 0 }}
             style={styles.transferGradient}
           >
-            <IconSymbol 
-              name={transferMethod === 'social' ? 'arrow.up.right' : 'link'} 
-              size={16} 
-              color="white" 
-            />
+            {isTransferring ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <IconSymbol 
+                name={transferMethod === 'social' ? 'arrow.up.right' : 'link'} 
+                size={16} 
+                color="white" 
+              />
+            )}
             <Text style={styles.transferButtonText}>
-              Transfer ${formatAmount(amount)}
+              {isTransferring ? 'Sending...' : `Transfer $${formatAmount(amount)}`}
             </Text>
           </LinearGradient>
         </TouchableOpacity>

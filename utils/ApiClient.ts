@@ -279,6 +279,25 @@ export class ApiClient {
       throw error;
     }
   }
+
+  // Transfer NFT using the correct API endpoint
+  static async transferNft721(data: {
+    recipient: string;          // username of the receiver
+    address: string;            // sender's wallet address
+    chainId: number;            // network chain id
+    nftAddress: string;         // NFT contract address
+    tokenId: number;            // token id (as number, not string)
+  }) {
+    console.log('🖼️ Calling transferNft721 API...', data);
+    try {
+      const result = await this.post('/wallets/transfer-nft-721', data);
+      console.log('✅ NFT transfer success:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ NFT transfer error:', error);
+      throw error;
+    }
+  }
 }
 
 export default ApiClient;

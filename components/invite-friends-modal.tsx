@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  Dimensions,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { inviteUtils } from '@/utils/inviteUtils';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+    Dimensions,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 interface InviteFriendsModalProps {
@@ -110,13 +110,39 @@ export default function InviteFriendsModal({ visible, onClose }: InviteFriendsMo
         <View style={styles.header}>
           <View style={styles.headerSpacer} />
           <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#333' }]}>
-            Invite Friends
+            Rewards
           </Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <View style={[styles.iconContainer, { backgroundColor: isDark ? '#333' : '#F0F0F0' }]}>
               <IconSymbol name="xmark" size={16} color={isDark ? '#FFF' : '#333'} />
             </View>
           </TouchableOpacity>
+        </View>
+
+        {/* Points Display */}
+        <View style={styles.pointsSection}>
+          <View style={styles.pointsContainer}>
+            <Text style={[styles.pointsLabel, { color: isDark ? '#AAA' : '#666' }]}>
+              Your Points
+            </Text>
+            <View style={styles.pointsDisplay}>
+              <View style={styles.pointsBadge}>
+                <Text style={styles.pointsValue}>0</Text>
+              </View>
+              <Text style={[styles.pointsText, { color: isDark ? '#FFF' : '#333' }]}>
+                PTS
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.rewardsInfo}>
+            <Text style={[styles.rewardsTitle, { color: isDark ? '#FFF' : '#333' }]}>
+              Earn Points by Inviting Friends!
+            </Text>
+            <Text style={[styles.rewardsSubtitle, { color: isDark ? '#AAA' : '#666' }]}>
+              Get 10 points for each friend who joins through your invite
+            </Text>
+          </View>
         </View>
 
         {/* Content */}
@@ -263,6 +289,55 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  pointsSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  pointsContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  pointsLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  pointsDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pointsBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pointsValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  pointsText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  rewardsInfo: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  rewardsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  rewardsSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   content: {
     flex: 1,

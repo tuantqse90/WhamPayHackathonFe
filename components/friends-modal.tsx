@@ -1,27 +1,27 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Image,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthenticationError } from '@/utils/ApiClient';
-import { 
+import {
   FriendshipApiClient,
-  FriendshipDto, 
-  UserSummaryDto 
+  FriendshipDto,
+  UserSummaryDto
 } from '@/utils/FriendshipApiClient';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface FriendsModalProps {
   visible: boolean;
@@ -62,9 +62,61 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
         { status: 'accepted', page: 1, size: 50 },
         { silent: true }
       );
+
+      console.log("👥 Friends list:", result);
       
       if (result && result.data) {
-        setFriends(result.data);
+        // Normalize API data to internal FriendshipDto shape
+        const normalized = (result.data as any[]).map((f: any) => {
+          // Case 1: API returns flat user summaries (id, username, name, ...)
+          if (f && f.username && !f.requester && !f.addressee) {
+            return {
+              id: f.id || f._id || '',
+              requester: {
+                id: '',
+                username: '',
+                name: '',
+                address: '',
+              },
+              addressee: {
+                id: f.id || f._id || '',
+                username: f.username,
+                name: f.name || f.username,
+                address: f.address || '',
+              },
+              status: 'accepted',
+              createdAt: f.createdAt || '',
+              updatedAt: f.updatedAt || '',
+            } as FriendshipDto;
+          }
+
+          // Case 2: Friendship-like payload
+          const id = f.id || f._id || '';
+          const requesterUsername = f.requesterUsername || f.requester?.username || 'unknown';
+          const responserUsername = f.responserUsername || f.addressee?.username || 'unknown';
+          const requesterId = f.requesterId || f.requester?.id || '';
+          const responserId = f.responserId || f.addressee?.id || '';
+          return {
+            id,
+            requester: {
+              id: requesterId,
+              username: requesterUsername,
+              name: f.requester?.name || requesterUsername,
+              address: f.requester?.address || '',
+            },
+            addressee: {
+              id: responserId,
+              username: responserUsername,
+              name: f.addressee?.name || responserUsername,
+              address: f.addressee?.address || '',
+            },
+            status: f.status || 'accepted',
+            message: f.message,
+            createdAt: f.createdAt,
+            updatedAt: f.updatedAt,
+          } as FriendshipDto;
+        });
+        setFriends(normalized);
       }
     } catch (error) {
       if (error instanceof AuthenticationError) {
@@ -98,7 +150,34 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
       const result = await FriendshipApiClient.getPendingRequests(1, 50, { silent: true });
       
       if (result && result.data) {
-        setFriendRequests(result.data);
+        // Normalize API data to internal FriendshipDto shape
+        const normalized = (result.data as any[]).map((f: any) => {
+          const id = f.id || f._id || '';
+          const requesterUsername = f.requesterUsername || f.requester?.username || 'unknown';
+          const responserUsername = f.responserUsername || f.addressee?.username || 'unknown';
+          const requesterId = f.requesterId || f.requester?.id || '';
+          const responserId = f.responserId || f.addressee?.id || '';
+          return {
+            id,
+            requester: {
+              id: requesterId,
+              username: requesterUsername,
+              name: f.requester?.name || requesterUsername,
+              address: f.requester?.address || '',
+            },
+            addressee: {
+              id: responserId,
+              username: responserUsername,
+              name: f.addressee?.name || responserUsername,
+              address: f.addressee?.address || '',
+            },
+            status: f.status,
+            message: f.message,
+            createdAt: f.createdAt,
+            updatedAt: f.updatedAt,
+          } as FriendshipDto;
+        });
+        setFriendRequests(normalized);
       }
     } catch (error) {
       if (error instanceof AuthenticationError) {
@@ -288,6 +367,7 @@ export default function FriendsModal({ visible, onClose }: FriendsModalProps) {
   // Friend Item Component
   const FriendItem = ({ item }: { item: FriendshipDto }) => {
     // Safely extract friend info with fallbacks
+    // Prefer show the other party's info based on current user role in friendship
     const friend = item?.addressee || item?.requester || {
       id: 'unknown',
       name: 'Unknown User', 
