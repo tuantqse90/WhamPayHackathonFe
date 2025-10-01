@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,9 +19,21 @@ import TransferModal from '@/components/transfer-modal';
 import AddFundsModal from '@/components/add-funds-modal';
 import ProfileModal from '@/components/profile-modal';
 import QRScannerModal from '@/components/qr-scanner-modal';
+import { useAuth } from '@/contexts/AuthContext';
+import { ApiClient } from '@/utils/ApiClient';
+import { fetchWalletBalance } from '@/utils/blockchainUtils';
+import { getMultipleTokenPrices, calculateUSDValue } from '@/utils/priceUtils';
 
-// Mock data for friends
-const friendsData = [
+interface FriendData {
+  id: string;
+  name: string;
+  username: string;
+  status: string;
+  avatar: string;
+}
+
+// Mock friends data
+const friendsData: FriendData[] = [
   {
     id: '1',
     name: 'Alice',
@@ -43,44 +57,167 @@ const friendsData = [
   },
 ];
 
-// Mock assets data
-const assetsData = [
-  {
-    id: '1',
-    name: 'DOT',
-    price: '$0.344727',
-    quantity: '23',
-    totalValue: '$7.929',
-    color: '#E91E63',
-  },
-  {
-    id: '2',
-    name: 'USDC',
-    price: '$1.000178',
-    quantity: '1368',
-    totalValue: '$1368.24',
-    color: '#2196F3',
-  },
-];
+interface TokenData {
+  id: string;
+  address: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: number;
+  balance?: string;
+  usdValue?: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function HomeScreen() {
-  const [selectedTab, setSelectedTab] = useState(0); // 0: Assets, 1: Contacts
+  const { user, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<'assets' | 'contacts'>('assets');
+  const [allTokens, setAllTokens] = useState<TokenData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [totalBalanceUSD, setTotalBalanceUSD] = useState('0');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAddFundsModal, setShowAddFundsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [selectedFriend, setSelectedFriend] = useState<typeof friendsData[0] | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<FriendData | null>(null);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const sortedFriends = friendsData.sort((a, b) => {
-    const isOnlineA = a.status === 'Online';
-    const isOnlineB = b.status === 'Online';
-    
-    if (isOnlineA && !isOnlineB) return -1;
-    if (!isOnlineA && isOnlineB) return 1;
-    return a.name.localeCompare(b.name);
-  });
+  // Color mapping for tokens
+  const getTokenColor = (symbol: string): string => {
+    const colorMap: { [key: string]: string } = {
+      'PAS': '#E91E63',
+      'USDT': '#26A17B',
+      'USDC': '#2196F3',
+      'ETH': '#627EEA',
+      'BTC': '#F7931A',
+      'DOT': '#E6007A',
+      'BNB': '#F3BA2F',
+    };
+    return colorMap[symbol.toUpperCase()] || '#9C27B0';
+  };
+
+  // Load native balance only for Balance Display
+  const loadAssetData = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      // Load wallet data
+      const walletResponse = await ApiClient.exportMainWallet();
+      if (walletResponse.success && walletResponse.data) {
+        try {
+          // Get native ETH balance only
+          const { provider } = await import('@/utils/blockchainUtils');
+          const ethBalance = await provider.getBalance(walletResponse.data.address);
+          const { ethers } = await import('ethers');
+          const nativeBalance = ethers.formatUnits(ethBalance, 18);
+          
+          // Get ETH price and calculate USD value
+          const tokenPrices = await getMultipleTokenPrices(['ETH']);
+          const ethPrice = tokenPrices['ETH'] || 0;
+          const usdValue = calculateUSDValue(nativeBalance, ethPrice);
+          
+          // Set USD balance only
+          setTotalBalanceUSD(usdValue);
+        } catch (error) {
+          console.error('Error fetching native balance:', error);
+          setTotalBalanceUSD('0');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading asset data:', error);
+      Alert.alert('Error', 'Failed to load asset data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Load all available tokens from API with real balances
+  const loadAllTokens = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setTokensLoading(true);
+      }
+
+      // Get wallet address first
+      const walletResponse = await ApiClient.exportMainWallet();
+      if (!walletResponse.success || !walletResponse.data) {
+        return;
+      }
+
+      const tokensResponse = await ApiClient.getTokens({ page: 1, size: 50 });
+      if (tokensResponse && Array.isArray(tokensResponse)) {
+        // Get all token symbols for price fetching
+        const tokenSymbols = tokensResponse.map(token => token.symbol);
+        
+        // Fetch real prices for all tokens
+        const tokenPrices = await getMultipleTokenPrices(tokenSymbols);
+        
+        // Load real balances for each token
+        const tokensWithBalance = await Promise.all(
+          tokensResponse.map(async (token) => {
+            let balance = '0';
+            try {
+              if (token.address === '0x0000000000000000000000000000000000000000') {
+                // Native token balance - use provider.getBalance directly
+                const { provider } = await import('@/utils/blockchainUtils');
+                const ethBalance = await provider.getBalance(walletResponse.data.address);
+                const { ethers } = await import('ethers');
+                balance = ethers.formatUnits(ethBalance, token.decimals);
+              } else {
+                // ERC20 token balance - use fetchWalletBalance
+                balance = await fetchWalletBalance(walletResponse.data.address, token.address);
+              }
+            } catch (error) {
+              console.error(`Error fetching balance for ${token.symbol}:`, error);
+              balance = '0';
+            }
+
+            // Calculate real USD value using fetched price
+            const tokenPrice = tokenPrices[token.symbol.toUpperCase()] || 0;
+            const usdValue = calculateUSDValue(balance, tokenPrice);
+
+            return {
+              ...token,
+              color: getTokenColor(token.symbol),
+              balance: balance,
+              usdValue: usdValue,
+            };
+          })
+        );
+
+        setAllTokens(tokensWithBalance);
+      }
+    } catch (error) {
+      console.error('Error loading all tokens:', error);
+    } finally {
+      setTokensLoading(false);
+      if (isRefresh) {
+        setRefreshing(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAssetData();
+    loadAllTokens();
+  }, [loadAssetData, loadAllTokens]);
+
+  const onRefresh = () => {
+    loadAssetData(true);
+    loadAllTokens(true);
+  };
 
   const handleTransfer = () => {
     setShowTransferModal(true);
@@ -104,19 +241,36 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F5F9F5' }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#007AFF"
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleProfile} style={styles.profileButton}>
             <Image
-              source={{ uri: 'https://pbs.twimg.com/profile_images/1892414539762978816/GL7lmx5e_400x400.jpg' }}
+              source={{ 
+                uri: user?.twitterId 
+                  ? `https://api.twitter.com/1.1/users/profile_image?user_id=${user.twitterId}&size=bigger`
+                  : 'https://pbs.twimg.com/profile_images/1892414539762978816/GL7lmx5e_400x400.jpg'
+              }}
               style={styles.profileImage}
             />
           </TouchableOpacity>
           
           <View style={styles.greetingContainer}>
             <Text style={[styles.greeting, { color: isDark ? '#FFF' : '#333' }]}>
-              gm Tunad
+              gm {user?.name || 'User'}
+            </Text>
+            <Text style={[styles.subGreeting, { color: isDark ? '#AAA' : '#666' }]}>
+              @{user?.username || 'username'}
             </Text>
           </View>
 
@@ -128,18 +282,28 @@ export default function HomeScreen() {
             <TouchableOpacity onPress={handleQRScan} style={styles.qrButton}>
               <IconSymbol name="qrcode.viewfinder" size={16} color="#007B50" />
             </TouchableOpacity>
+            
+            <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+              <IconSymbol name="rectangle.portrait.and.arrow.right" size={16} color="#FF3B30" />
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Balance Display */}
         <View style={styles.balanceContainer}>
           <View style={styles.balanceRow}>
-            <Text style={[styles.balanceAmount, { color: isDark ? '#FFF' : '#333' }]}>
-              1,500
-            </Text>
-            <Text style={[styles.balanceCurrency, { color: isDark ? '#AAA' : '#666' }]}>
-              USDC
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="large" color="#007B50" />
+            ) : (
+              <>
+                <Text style={[styles.balanceAmount, { color: isDark ? '#FFF' : '#333' }]}>
+                  ${totalBalanceUSD || '0.00'}
+                </Text>
+                <Text style={[styles.balanceCurrency, { color: isDark ? '#AAA' : '#666' }]}>
+                  USD
+                </Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -165,112 +329,126 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Tab Selection */}
+        {/* Tab Container */}
         <View style={styles.tabContainer}>
-          <TouchableOpacity
-            onPress={() => setSelectedTab(0)}
-            style={styles.tabButton}
+          <TouchableOpacity 
+            style={styles.tabButton} 
+            onPress={() => setActiveTab('assets')}
           >
-            <Text
-              style={[
-                styles.tabText,
-                { color: isDark ? '#FFF' : '#333' },
-                selectedTab === 0 && styles.activeTabText,
-              ]}
-            >
+            <Text style={[
+              styles.tabText, 
+              activeTab === 'assets' ? styles.activeTabText : { color: isDark ? '#666' : '#999' }
+            ]}>
               Assets
             </Text>
-            {selectedTab === 0 && <View style={styles.tabIndicator} />}
+            {activeTab === 'assets' && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setSelectedTab(1)}
-            style={styles.tabButton}
+          
+          <TouchableOpacity 
+            style={styles.tabButton} 
+            onPress={() => setActiveTab('contacts')}
           >
-            <Text
-              style={[
-                styles.tabText,
-                { color: isDark ? '#FFF' : '#333' },
-                selectedTab === 1 && styles.activeTabText,
-              ]}
-            >
+            <Text style={[
+              styles.tabText, 
+              activeTab === 'contacts' ? styles.activeTabText : { color: isDark ? '#666' : '#999' }
+            ]}>
               Contacts
             </Text>
-            {selectedTab === 1 && <View style={styles.tabIndicator} />}
+            {activeTab === 'contacts' && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
         </View>
 
-        {/* Content based on selected tab */}
-        {selectedTab === 0 ? (
-          // Assets List
-          <View style={styles.contentContainer}>
-            {assetsData.map((asset, index) => (
-              <View key={asset.id}>
-                <View style={styles.assetRow}>
-                  <View style={[styles.assetIcon, { backgroundColor: asset.color }]}>
-                    <Text style={styles.assetIconText}>
-                      {asset.name.charAt(0)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.assetInfo}>
-                    <Text style={[styles.assetName, { color: isDark ? '#FFF' : '#333' }]}>
-                      {asset.name}
-                    </Text>
-                    <Text style={[styles.assetPrice, { color: isDark ? '#AAA' : '#666' }]}>
-                      {asset.price}
-                    </Text>
-                  </View>
-
-                  <View style={styles.assetValues}>
-                    <Text style={[styles.assetQuantity, { color: isDark ? '#FFF' : '#333' }]}>
-                      {asset.quantity}
-                    </Text>
-                    <Text style={[styles.assetTotal, { color: isDark ? '#AAA' : '#666' }]}>
-                      {asset.totalValue}
-                    </Text>
-                  </View>
+        {/* Content Container */}
+        <View style={styles.contentContainer}>
+          {activeTab === 'assets' ? (
+            // Assets Tab Content
+            <>
+              {tokensLoading && allTokens.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#007AFF" />
+                  <Text style={[styles.loadingText, { color: isDark ? '#AAA' : '#666' }]}>
+                    Loading tokens...
+                  </Text>
                 </View>
-                {index < assetsData.length - 1 && (
-                  <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
-                )}
-              </View>
-            ))}
-          </View>
-        ) : (
-          // Contacts List
-          <View style={styles.contentContainer}>
-            {sortedFriends.map((friend, index) => (
-              <View key={friend.id}>
-                <TouchableOpacity 
-                  style={styles.friendRow}
-                  onPress={() => {
-                    setSelectedFriend(friend);
-                    setShowProfileModal(true);
-                  }}
-                >
-                  <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
-                  
-                  <View style={styles.friendInfo}>
-                    <Text style={[styles.friendName, { color: isDark ? '#FFF' : '#333' }]}>
-                      {friend.name}
-                    </Text>
-                    <Text style={[styles.friendStatus, { color: isDark ? '#AAA' : '#666' }]}>
-                      {friend.status}
-                    </Text>
-                  </View>
+              ) : allTokens.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <IconSymbol name="creditcard" size={48} color={isDark ? '#666' : '#999'} />
+                  <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#333' }]}>
+                    No Tokens Available
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: isDark ? '#AAA' : '#666' }]}>
+                    No tokens found in the system
+                  </Text>
+                </View>
+              ) : (
+                allTokens.map((token, index) => (
+                  <View key={token.id}>
+                    <TouchableOpacity style={styles.assetRow}>
+                      <View style={[styles.assetIcon, { backgroundColor: token.color }]}>
+                        <Text style={styles.assetIconText}>
+                          {token.symbol.charAt(0)}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.assetInfo}>
+                        <Text style={[styles.assetName, { color: isDark ? '#FFF' : '#333' }]}>
+                          {token.name}
+                        </Text>
+                        <Text style={[styles.assetPrice, { color: isDark ? '#AAA' : '#666' }]}>
+                          {token.symbol} • {token.decimals} decimals
+                        </Text>
+                      </View>
 
-                  {friend.status === 'Online' && (
-                    <View style={styles.onlineIndicator} />
+                      <View style={styles.assetValues}>
+                        <Text style={[styles.assetQuantity, { color: isDark ? '#FFF' : '#333' }]}>
+                          {parseFloat(token.balance || '0').toFixed(4)}
+                        </Text>
+                        <Text style={[styles.assetTotal, { color: isDark ? '#AAA' : '#666' }]}>
+                          ${token.usdValue || '0.00'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    {index < allTokens.length - 1 && (
+                      <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
+                    )}
+                  </View>
+                ))
+              )}
+            </>
+          ) : (
+            // Contacts Tab Content
+            <>
+              {friendsData.map((friend, index) => (
+                <View key={friend.id}>
+                  <TouchableOpacity 
+                    style={styles.friendRow}
+                    onPress={() => setSelectedFriend(friend)}
+                  >
+                    <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
+                    
+                    <View style={styles.friendInfo}>
+                      <Text style={[styles.friendName, { color: isDark ? '#FFF' : '#333' }]}>
+                        {friend.name}
+                      </Text>
+                      <Text style={[styles.friendStatus, { 
+                        color: friend.status === 'Online' ? '#4CAF50' : (isDark ? '#AAA' : '#666') 
+                      }]}>
+                        {friend.status}
+                      </Text>
+                    </View>
+
+                    {friend.status === 'Online' && (
+                      <View style={styles.onlineIndicator} />
+                    )}
+                  </TouchableOpacity>
+                  {index < friendsData.length - 1 && (
+                    <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
                   )}
-                </TouchableOpacity>
-                {index < sortedFriends.length - 1 && (
-                  <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#E5E5E5' }]} />
-                )}
-              </View>
-            ))}
-          </View>
-        )}
+                </View>
+              ))}
+            </>
+          )}
+        </View>
       </ScrollView>
 
       {/* Transfer Modal */}
@@ -333,6 +511,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
   },
+  subGreeting: {
+    fontSize: 14,
+    marginTop: 2,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,6 +538,12 @@ const styles = StyleSheet.create({
     borderColor: '#007B50',
     borderRadius: 16,
   },
+  logoutButton: {
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    borderRadius: 16,
+  },
   balanceContainer: {
     alignItems: 'center',
     paddingVertical: 20,
@@ -371,6 +559,11 @@ const styles = StyleSheet.create({
   },
   balanceCurrency: {
     fontSize: 20,
+  },
+  balanceUSD: {
+    fontSize: 16,
+    marginTop: 8,
+    textAlign: 'center',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -516,5 +709,38 @@ const styles = StyleSheet.create({
   separator: {
     height: 1,
     marginHorizontal: 20,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
   },
 });

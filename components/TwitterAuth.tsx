@@ -6,15 +6,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from './ui/icon-symbol';
+import { useAuth } from '../contexts/AuthContext';
+import { BACKEND_URL } from '../config/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
 // Twitter OAuth 2.0 Configuration
-const TWITTER_CLIENT_ID = 'TGpqWGNodzNZQkFoU1VQSW0wWVQ6MTpjaQ';
-const TWITTER_CLIENT_SECRET = 'obbuP9DNMBHtSBvVNV-yjgwtCj44-HJDXHFopyij8BBjDf8Z54';
+const TWITTER_CLIENT_ID = 'RTMtVlJEVFZ2cE0wTW9YYzlkcjM6MTpjaQ';
+const TWITTER_CLIENT_SECRET = 'gG0ZQhw8BIgS9nydrOpTO2h7AizIhAINSSo7z0Wkk-lmcReRGr';
 
 const TwitterAuth = () => {
   const router = useRouter();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
 
@@ -121,7 +124,7 @@ const TwitterAuth = () => {
       // Send Twitter token to backend for authentication
       setLoadingStep('Authenticating with WhamPay...');
       console.log('🔐 Twitter Access Token:', tokenData.access_token);
-      const backendResponse = await fetch('http://192.168.2.39:3000/v1/auth/twitter/mobile', {
+      const backendResponse = await fetch(`${BACKEND_URL}/auth/twitter/mobile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,17 +143,20 @@ const TwitterAuth = () => {
       const backendData = await backendResponse.json();
       console.log('✅ Backend authentication successful');
 
-      // Store WhamPay JWT tokens
-      await AsyncStorage.multiSet([
-        ['whampay_access_token', backendData.data.accessToken],
-        ['whampay_refresh_token', backendData.data.refreshToken],
-        ['whampay_user', JSON.stringify(backendData.data.user)],
-        ['twitter_token', tokenData.access_token], // Keep Twitter token for API calls
-      ]);
+      // Keep Twitter token for API calls
+      await AsyncStorage.setItem('twitter_token', tokenData.access_token);
 
-      // Success - navigate to main app
+      // Use AuthContext to handle login and navigation
+      await login({
+        accessToken: backendData.data.accessToken,
+        refreshToken: backendData.data.refreshToken,
+        user: backendData.data.user,
+      });
+
+      // Success message
       setLoadingStep(backendData.data.isCreatedWallet ? 'Welcome to WhamPay!' : 'Welcome back!');
-      console.log('🎉 WhamPay login completed! Redirecting to home...');
+      console.log('🎉 WhamPay login completed! AuthContext will handle navigation...');
+      
       setTimeout(() => {
         router.replace('/(tabs)/home');
       }, 1000);
@@ -164,7 +170,7 @@ const TwitterAuth = () => {
       setIsLoading(false);
       setLoadingStep('');
     }
-  }, [request, redirectUri, router]);
+  }, [request, redirectUri, router, login]);
 
   // Check for stored auth code from deep link callback
   useEffect(() => {

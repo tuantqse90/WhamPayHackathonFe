@@ -10,6 +10,7 @@ import {
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ApiClient } from '../utils/ApiClient';
 
 type TransferMethod = 'social' | 'onchain' | 'gift';
 
@@ -105,6 +106,51 @@ export default function TransferAmountView({
     }
   };
 
+  const executeTransfer = async () => {
+    try {
+      // For social transfer, use transferToUser API
+      if (transferMethod === 'social') {
+        const result = await ApiClient.transferToUser({
+          recipient: recipient.replace('@', ''), // Remove @ symbol if present
+          amount: parseFloat(amount),
+          isNative: true, // Default to native token (ETH/PAS)
+          chainId: 8453,
+        });
+        
+        if (result.success) {
+          Alert.alert(
+            'Transfer Successful',
+            `Successfully sent $${formatAmount(amount)} to ${recipient}`,
+            [{ text: 'OK', onPress: onComplete }]
+          );
+        } else {
+          Alert.alert('Transfer Failed', result.message || 'Transfer failed');
+        }
+      } else {
+        // For onchain transfer, use multiSendTokens API with single address
+        const result = await ApiClient.multiSendTokens({
+          wallets: [recipient], // Single address for onchain
+          amount: parseFloat(amount),
+          isNative: true,
+          chainId: 8453,
+        });
+        
+        if (result.success) {
+          Alert.alert(
+            'Transfer Successful',
+            `Successfully sent $${formatAmount(amount)} to ${recipient}`,
+            [{ text: 'OK', onPress: onComplete }]
+          );
+        } else {
+          Alert.alert('Transfer Failed', result.message || 'Transfer failed');
+        }
+      }
+    } catch (error) {
+      console.error('Transfer error:', error);
+      Alert.alert('Transfer Failed', 'An error occurred during transfer');
+    }
+  };
+
   const handleTransfer = () => {
     if (amount === '0' || !amount) {
       Alert.alert('Error', 'Please enter an amount');
@@ -124,18 +170,7 @@ export default function TransferAmountView({
         {
           text: 'Confirm Transfer',
           style: 'default',
-          onPress: () => {
-            Alert.alert(
-              'Transfer Successful',
-              `Successfully sent $${formatAmount(amount)} to ${recipient}`,
-              [
-                {
-                  text: 'OK',
-                  onPress: onComplete,
-                },
-              ]
-            );
-          },
+          onPress: executeTransfer,
         },
       ]
     );
